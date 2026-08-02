@@ -22,6 +22,8 @@ NeuroGuard is an intelligent wearable safety vest developed by Team SenseSphere 
 The system combines:
 - inertial motion sensing,
 - physiological signal analysis,
+- environmental sensing,
+- proximity and ambient light awareness,
 - embedded artificial intelligence,
 - temporal behavioral inference,
 - multi-condition classification,
@@ -40,14 +42,18 @@ NeuroGuard continuously studies:
 - heart rate and heart rate variability,
 - blood oxygen saturation,
 - posture and orientation dynamics,
+- barometric pressure and altitude changes,
+- proximity to obstacles and ambient light context,
 - and temporal physiological consistency
 
 to provide condition-aware protective intervention during acute neurological events.
 
 The wearable integrates:
 - ESP32 microcontroller
-- MPU6050 inertial measurement unit
+- MPU6050 inertial measurement unit (I2C addr 0x69)
 - MAX30102 pulse oximeter and heart rate sensor
+- BMP180 barometric pressure and temperature sensor
+- APDS9960 proximity, gesture and ambient light sensor
 - OLED visualization display
 - SD-card event logging
 - Active buzzer emergency alert
@@ -70,7 +76,10 @@ The wearable integrates:
 - MOSFET-driven pump actuation
 - Adaptive baseline calibration
 - Confidence-gated prediction rejection
-- Multimodal sensor fusion (motion + physiological)
+- Multimodal sensor fusion (motion + physiological + environmental)
+- Barometric altitude change detection (fall corroboration)
+- Proximity-aware sleepwalking collision warning
+- Ambient light context (sleep vs waking detection)
 - Temporal deep-learning behavioral analysis
 - Automatic buzzer alarm with volume control
 - Battery monitoring and reporting
@@ -80,10 +89,12 @@ The wearable integrates:
 
 ### Hardware
 - ESP32
-- MPU6050
-- MAX30102
-- OLED Display (SSD1306)
-- MicroSD Card Module
+- MPU6050 (I2C 0x69)
+- MAX30102 (I2C 0x57)
+- BMP180 (I2C 0x77)
+- APDS9960 (I2C 0x39)
+- OLED Display SSD1306 (I2C 0x3C)
+- MicroSD Card Module (SPI)
 - Active Buzzer
 - Cancel Push Button
 - 3 x IRLZ44N MOSFET drivers
@@ -110,7 +121,7 @@ The wearable integrates:
 
 ## Working Principle
 
-After initialization, NeuroGuard begins an initial calibration phase where baseline movement and physiological characteristics are recorded for the specific wearer.
+After initialization, NeuroGuard begins an initial calibration phase where baseline movement, physiological, and environmental characteristics are recorded for the specific wearer.
 
 The system continuously collects synchronized sensor data including:
 - three-axis acceleration and gyroscope,
@@ -118,13 +129,20 @@ The system continuously collects synchronized sensor data including:
 - roll and pitch orientation,
 - heart rate and HRV,
 - blood oxygen saturation,
+- barometric pressure and derived altitude,
+- ambient temperature,
+- proximity to nearby objects,
+- ambient light (lux) and RGB color context,
 - and pulse amplitude.
 
 The behavioral-analysis pipeline studies:
 - gait continuity,
 - tremor frequency signatures,
 - impact and free-fall dynamics,
+- barometric altitude drop (fall verification),
 - physiological perturbations,
+- proximity buildup (imminent collision during sleepwalking),
+- ambient light context (nocturnal vs diurnal disambiguation),
 - and temporal event consistency.
 
 Instead of reacting to isolated sensor readings, the system analyzes short temporal behavioral windows (one full second at 20 Hz) to differentiate:
@@ -141,7 +159,7 @@ When a neurological emergency is detected with sufficient confidence, the system
 
 - Sleepwalking : upper-body inflation to cushion collisions
 - Seizure : neck and head chamber inflation
-- Fall : full upper-body inflation on free-fall + impact signature
+- Fall : full upper-body inflation on free-fall + impact + barometric drop signature
 - Syncope : preemptive inflation on the physiological warning
 - Freezing of Gait : audio prompts only, unless a subsequent fall is detected
 
@@ -154,6 +172,8 @@ NeuroGuard is an upgraded evolution of the NeuroGlove MYOSA project. The prior v
 ### New Features
 - Multi-condition neurological classification (5 emergency + 3 normal classes) replacing single-domain rehab state machine.
 - Dual-modality sensor fusion with the MAX30102 pulse oximeter added alongside the MPU6050 for physiological signatures.
+- Environmental context sensing with BMP180 for barometric altitude verification of falls.
+- Proximity and ambient light awareness through APDS9960 for sleepwalking collision warnings and nocturnal disambiguation.
 - Physical intervention subsystem with three MOSFET-driven 24V air pumps and PVC inflatable chambers - the previous version was alert-only.
 - 30-second user acknowledgement window with hardware cancel button for false-alarm suppression.
 - Condition-specific inflation policy - freezing of gait deliberately delays inflation, syncope inflates preemptively, seizure targets neck/head only.
@@ -164,8 +184,9 @@ NeuroGuard is an upgraded evolution of the NeuroGlove MYOSA project. The prior v
 - BLE GATT service with JSON payloads replacing classic BluetoothSerial SPP, enabling cross-platform Flutter clients.
 - Confidence-gated inference - predictions below a runtime-adjustable threshold are rejected, dramatically reducing false interventions.
 - Structured daily-rotating SD CSV logs (event log + intervention outcome) versus flat session logs.
-- End-to-end retraining pipeline: synthetic dataset generation for 8 classes, CNN+BiLSTM+Attention training, FP16 and INT8 TFLite export, C-header embedding.
+- End-to-end retraining pipeline: synthetic dataset generation for 8 classes with 16 input features, CNN+BiLSTM+Attention training, FP16 and INT8 TFLite export, C-header embedding.
 - Runtime-tunable configuration (confidence threshold, ack timeout, per-condition enable/disable, buzzer volume) writeable over BLE.
+- MPU6050 wired at alternate address 0x69 (AD0 tied HIGH) to avoid future I2C address collisions on the shared bus.
 
 ## Future Scope
 
@@ -196,8 +217,8 @@ The project aims to contribute toward accessible, intelligent, and life-saving a
 
 ## Installation & Usage
 
-1. Assemble the hardware components and connect sensors to the ESP32 microcontroller following the wiring in `neuroguard_main.ino`.
-2. Install required Arduino libraries: Adafruit_MPU6050, Adafruit_SSD1306, SparkFun_MAX3010x, ArduinoBLE, ArduinoJson, TensorFlowLite_ESP32.
+1. Assemble the hardware components and connect sensors to the ESP32 microcontroller following the wiring in `neuroguard_main.ino`. Note that MPU6050's AD0 pin is tied HIGH so its I2C address is `0x69`, not the default `0x68`.
+2. Install required Arduino libraries: Adafruit_MPU6050, Adafruit_SSD1306, SparkFun_MAX3010x, Adafruit_BMP085 (BMP180), SparkFun_APDS9960, ArduinoBLE, ArduinoJson, TensorFlowLite_ESP32.
 3. Run `python generate_synthetic_dataset.py` to bootstrap the training data.
 4. Run `python neuroguard_model_training.py` to train the CNN+BiLSTM+Attention model and export the TFLite artifacts.
 5. Convert the exported `.tflite` to a C header using `python tflite_to_c_header.py`.
